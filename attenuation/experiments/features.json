@@ -1,0 +1,8 @@
+{
+    "max_pool": 0,
+    "min_pool": 1,
+    "avg_pool": 2,
+    "sum": 3,
+    "dist_argmin": 4,
+    "dist_argmax": 5
+}
