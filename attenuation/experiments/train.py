@@ -40,8 +40,8 @@ def train(
         for _ in trange(batches_per_epoch):
             
             ## GENERATE TRAINING BATCH ON THE FLY (CHEAP)
-            num_items = torch.randint(low=1, high=20)
-            features, functions, targets = generate_batch(num_items=num_items, num_features=num_features, device=model.device)
+            num_items = torch.randint(low=1, high=20, size=(1,))
+            features, functions, targets = generate_batch(num_items=num_items, batch_size=batch_size, num_features=num_features, device=model.device)
 
             ## STEP MODEL
             opt.zero_grad()
@@ -62,7 +62,7 @@ def train(
         for _ in trange(1):
             
             ## GENERATE TEST BATCH ON THE FLY (CHEAP)
-            features, functions, targets = generate_batch(batch_size=batch_size, num_features=num_features, device=model.device)
+            features, functions, targets = generate_batch(num_items=num_items, batch_size=batch_size, num_features=num_features, device=model.device)
 
             ## STEP MODEL
             preds = model(features, functions)
@@ -116,5 +116,5 @@ if __name__ == '__main__':
         num_features=3, 
         dataset_size=65536, 
         epochs=1_000, 
-        batch_size=8192
+        batch_size=65536
     )
