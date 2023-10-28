@@ -40,7 +40,8 @@ def train(
         for _ in trange(batches_per_epoch):
             
             ## GENERATE TRAINING BATCH ON THE FLY (CHEAP)
-            features, functions, targets = generate_batch(batch_size=batch_size, num_features=num_features, device=model.device)
+            num_items = torch.randint(low=1, high=20)
+            features, functions, targets = generate_batch(num_items=num_items, num_features=num_features, device=model.device)
 
             ## STEP MODEL
             opt.zero_grad()
@@ -95,11 +96,6 @@ def plot_loss(train_history, test_history, filepath):
     plt.tight_layout()
     plt.savefig(filepath)
     plt.close()
-
-    # Save gnn for future use
-    model_output_path = f"{filepath}/acesgame_gnn_final.pth"
-
-
     return
 
 
