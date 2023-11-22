@@ -24,7 +24,7 @@ def symexp(x):
     return torch.sign(x) * torch.exp(torch.abs(x))
     # return torch.sign(x) * (torch.exp(torch.abs(x)) - 1)
 
-def donut(x, min=1e-2, max=1e+6):
+def donut(x, min=1e-3, max=1e+6):
     ## PREVENT x FROM TAKING VALUES WITHIN min OF 0 OR GREATER THAN max
     return torch.sign(x + min/2) * torch.clamp(torch.abs(x), min=min, max=max)
 
@@ -64,8 +64,8 @@ class GeMAttention(nn.Module):
         self.scale = 1 / math.sqrt(hidden_dim)
         self.drop_attn = nn.Dropout(drop_attn)
         self.drop_out = nn.Dropout(drop_out)
-        self.log_p = nn.Parameter(torch.rand((context_dim,))) ## UNIQUE AGGEGATION PER FEATURE
-        # self.p = nn.Parameter(torch.rand((context_dim,))) ## UNIQUE AGGEGATION PER FEATURE
+        # self.log_p = nn.Parameter(torch.rand((context_dim,))) ## UNIQUE AGGEGATION PER FEATURE
+        self.p = nn.Parameter(torch.rand((context_dim,))) ## UNIQUE AGGEGATION PER FEATURE
         # self.p = nn.Parameter(torch.Tensor((1, 0, -1, 1e+3, -1e+3)))
         self.eps = 1e-10
 
@@ -104,8 +104,8 @@ class GeMAttention(nn.Module):
         v = self.V(context)
         
         ## POWER SCALING FOR GENERALIZED MEAN
-        # p = donut(self.p)   ## PREVENT P FROM BEING EXACTLY 0
-        p = donut(torch.exp(self.log_p))   ## PREVENT P FROM BEING EXACTLY 0
+        p = donut(self.p)   ## PREVENT P FROM BEING EXACTLY 0
+        # p = donut(torch.exp(self.log_p))   ## PREVENT P FROM BEING EXACTLY 0
         ## IF p < 1 -> Take abs value of v??
         v = torch.abs(v) + self.eps        ## ENFORCE v in positive real numbers
         # v = torch.clamp(v, min=self.eps) ## ENFORCE v in positive real numbers
@@ -117,9 +117,6 @@ class GeMAttention(nn.Module):
         z = p * torch.log(v)  ## COMPUTE POWER ALONG CONTEXT DIMENSION
         z_max = z.max(dim=1)[0].unsqueeze(1) ## TAKE MAX ALONG CONTEXT DIMENSION
         v = torch.exp(z - z_max) ## RAISE v TO p
-
-        ## TODO: When p is small, why does z get small for that feature but NOT v after?
-        ## something happening with the max subtraction exponentiation?
 
         ## SPLIT ATTENTION HEADS
         q = q.view(b, q_len, h, a)

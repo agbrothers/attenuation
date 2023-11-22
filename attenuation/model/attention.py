@@ -75,7 +75,7 @@ class MultiHeadAttention(nn.Module):
         attn_weights = torch.einsum("bqha,bkha->bqkh", (q, k))
         if mask is not None: attn_weights = self.apply_mask(attn_weights, mask)
         attn_weights = torch.softmax(attn_weights * self.scale, dim=2)
-        attn_weights = self.drop_attn(attn_weights)
+        # attn_weights = self.drop_attn(attn_weights)
         self.attn_weights = attn_weights
 
         ## APPLY ATTENTION WEIGHTS TO VALUES
