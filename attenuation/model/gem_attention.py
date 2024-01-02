@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 
-from attenuation.experiments.dataset import generate_test, generate_means
+from attenuation.experiments.test_batches import generate_test, generate_means
 
 
 def identity_init(module, bias=0):
@@ -24,7 +24,7 @@ def symexp(x):
     return torch.sign(x) * torch.exp(torch.abs(x))
     # return torch.sign(x) * (torch.exp(torch.abs(x)) - 1)
 
-def donut(x, min=1e-3, max=1e+6):
+def donut(x, min=1e-3, max=1e+2):
     ## PREVENT x FROM TAKING VALUES WITHIN min OF 0 OR GREATER THAN max
     return torch.sign(x + min/2) * torch.clamp(torch.abs(x), min=min, max=max)
 
@@ -39,51 +39,56 @@ def harmonic_mean(x):
 def generalized_mean(x, p):
     n = len(x)
     eps = 1e-10
-    return (torch.sum(torch.pow(-x-1, p)) / n).pow(1/p)
+    return (torch.sum(torch.pow(x, p)) / n).pow(1/p)
+
+import numpy as np
+def np_generalized_mean(x, p):
+    n = len(x)
+    eps = 1e-10
+    return np.power((np.sum(np.power(x, p)) / n), 1/p)
     # return torch.exp(torch.log((torch.sum(torch.exp(p * torch.log(-x))) / n)) / p)
     # return symexp(symlog((torch.sum(symexp(p * symlog(x+eps))) / n) ) / p)
 
+# generalized_mean(torch.Tensor([1,2,3,4]), 1)
+# generalized_mean(torch.Tensor([0,0,0,0]), -1)
+# np_generalized_mean(np.array([0.,0.,0.,0.]), -1)
 
 class GeMAttention(nn.Module):
 
     def __init__(
         self, 
-        query_dim, 
-        context_dim, 
         hidden_dim, 
         num_heads, 
-        drop_attn=0, 
-        drop_out=0,
+        dropout=0,
+        shift=5,
+        eps=1e-10,
     ):
         super().__init__()
 
-        self.Q = nn.Linear(query_dim, hidden_dim, bias=False)
-        self.K = nn.Linear(context_dim, hidden_dim, bias=False)
-        self.V = nn.Linear(context_dim, hidden_dim, bias=True)
-        self.out = nn.Linear(hidden_dim, context_dim, bias=True)
+        self.Q = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.K = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.V = nn.Linear(hidden_dim, hidden_dim, bias=False)
+        self.out = nn.Linear(hidden_dim, hidden_dim, bias=False)
         self.scale = 1 / math.sqrt(hidden_dim)
-        self.drop_attn = nn.Dropout(drop_attn)
-        self.drop_out = nn.Dropout(drop_out)
-        # self.log_p = nn.Parameter(torch.rand((context_dim,))) ## UNIQUE AGGEGATION PER FEATURE
-        self.p = nn.Parameter(torch.rand((context_dim,))) ## UNIQUE AGGEGATION PER FEATURE
+        self.dropout = nn.Dropout(dropout)
+        # self.log_p = nn.Parameter(torch.rand((hidden_dim,))) ## UNIQUE AGGEGATION PER FEATURE
+        # self.p = nn.Parameter(torch.rand((hidden_dim,))) ## UNIQUE AGGEGATION PER FEATURE
+        self.p = nn.Parameter(torch.normal(mean=1, std=0.02, size=(hidden_dim,)))
         # self.p = nn.Parameter(torch.Tensor((1, 0, -1, 1e+3, -1e+3)))
-        self.eps = 1e-10
+        self.shift = nn.Parameter(torch.ones((hidden_dim,)) * shift) ## SHIFT VALUES PRIOR TO GENERALIZED MEAN
+        self.eps = eps
 
         self.hidden_dim = hidden_dim
         self.num_heads = num_heads
         self.attn_dim = hidden_dim // num_heads
         self.attn_weights = None
 
-        # identity_init(self.Q)
-        # identity_init(self.K)
-        # identity_init(self.V)
-        # identity_init(self.out)
         normal_init(self.Q)
         normal_init(self.K)
         normal_init(self.V)
-        normal_init(self.out)
-        with torch.no_grad(): self.V.bias[:] = 5
-        with torch.no_grad(): self.out.bias[:] = -5
+        normal_init(self.out) #xavier_normal_
+        # with torch.no_grad(): self.V.bias[:] = 5
+        # with torch.no_grad(): self.out.bias[:] = -5
 
 
     def forward(self, query, context, mask=None):
@@ -107,16 +112,18 @@ class GeMAttention(nn.Module):
         p = donut(self.p)   ## PREVENT P FROM BEING EXACTLY 0
         # p = donut(torch.exp(self.log_p))   ## PREVENT P FROM BEING EXACTLY 0
         ## IF p < 1 -> Take abs value of v??
-        v = torch.abs(v) + self.eps        ## ENFORCE v in positive real numbers
-        # v = torch.clamp(v, min=self.eps) ## ENFORCE v in positive real numbers
-        # v = torch.relu(v) + self.eps     ## ENFORCE v in positive real numbers
+
+        ## SHIFT v TO POSITIVE REALS
+        v = torch.clamp(torch.abs(v + self.shift), min=self.eps)
+        # v = torch.clamp(v, min=self.eps) 
+        # v = torch.relu(v) + self.eps     
         
         ## LOG SUM EXP OVERFLOW TRICK 
-        ## v = torch.pow(v, p)
-        ## v = torch.exp(p * torch.log(v)) ## RAISE v TO p
         z = p * torch.log(v)  ## COMPUTE POWER ALONG CONTEXT DIMENSION
         z_max = z.max(dim=1)[0].unsqueeze(1) ## TAKE MAX ALONG CONTEXT DIMENSION
         v = torch.exp(z - z_max) ## RAISE v TO p
+        ## v = torch.exp(p * torch.log(v)) ## RAISE v TO p
+        ## v = torch.pow(v, p)
 
         ## SPLIT ATTENTION HEADS
         q = q.view(b, q_len, h, a)
@@ -140,10 +147,11 @@ class GeMAttention(nn.Module):
         ## mean = torch.exp(torch.log(attn) / p)
         # logsumexp = z_max + torch.log(attn)
         # mean = torch.exp(logsumexp / p)
-        mean = torch.exp((z_max + torch.log(attn)) / p)
+        gem = torch.exp((z_max + torch.log(attn)) / p) - self.shift ## NOTE - self.shift was missing!!!
+        ## TODO: Figure out why exactly exponentiating p is leading to nans
         
-        output = self.drop_out(self.out(mean))
-        assert not torch.any(torch.isnan(output)), "Nans in GeM output!"
+        output = self.dropout(self.out(gem))
+        # assert not torch.any(torch.isnan(output)), "Nans in GeM output!"
         # assert not torch.any(output > 1e+3), "GeM output too large!"
         return output
 

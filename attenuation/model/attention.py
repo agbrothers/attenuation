@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 
-from attenuation.experiments.dataset import generate_test, generate_means
+from attenuation.experiments.test_batches import generate_test, generate_means
 
 
 def identity_init(module, bias=0):
