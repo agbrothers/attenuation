@@ -21,7 +21,7 @@ def load():
     val_data = process_iter(val_iter, vocab, tokenizer)
     test_data = process_iter(test_iter, vocab, tokenizer)
 
-    return train_data, val_data, test_data, len(vocab)
+    return train_data, val_data, test_data, vocab, tokenizer
 
 def process_iter(
         raw_text_iter: dataset.IterableDataset, 
