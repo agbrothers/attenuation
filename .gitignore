@@ -166,3 +166,5 @@ cython_debug/
 *.csv
 *.json
 old/*
+*.mp4
+results/
