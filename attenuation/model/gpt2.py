@@ -87,7 +87,7 @@ class DecoderLayer(nn.Module):
         self.hidden_size = hidden_dim
         # self.attn = MultiHeadAttention(hidden_dim, num_heads, dropout, dropout)
         AttnMechanism = GeMAttention if attn_type == "GeM" else MultiHeadAttention
-        self.attn = AttnMechanism(hidden_dim=hidden_dim, num_heads=num_heads, drop_attn=dropout, drop_out=dropout)
+        self.attn = AttnMechanism(hidden_dim=hidden_dim, num_heads=num_heads, dropout_w=dropout, dropout_e=dropout)
         self.ff = FeedForward(hidden_dim, feedforward_size, dropout)
         self.norm1 = nn.LayerNorm(hidden_dim)
         self.norm2 = nn.LayerNorm(hidden_dim)
